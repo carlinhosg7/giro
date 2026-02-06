@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
-import openpyxl
 
 # Configuração da página Streamlit
 st.set_page_config(page_title="Análise de Giro e Estoque", layout="wide")
@@ -53,30 +52,13 @@ def main():
     # Estilo CSS para reduzir fontes e melhorar o aproveitamento de espaço
     st.markdown("""
         <style>
-            /* Reduz o tamanho das métricas (KPIs) */
-            [data-testid="stMetricValue"] {
-                font-size: 0.85rem !important;
-            }
-            [data-testid="stMetricLabel"] {
-                font-size: 0.85rem !important;
-            }
-            /* Ajusta o tamanho da fonte global e tabelas */
-            .stDataFrame, div[data-testid="stTable"] {
-                font-size: 12px !important;
-            }
-            /* Reduz margens do cabeçalho */
-            .main .block-container {
-                padding-top: 2rem;
-            }
-            h1 {
-                font-size: 2rem !important;
-            }
-            h2 {
-                font-size: 1.5rem !important;
-            }
-            h3 {
-                font-size: 1.2rem !important;
-            }
+            [data-testid="stMetricValue"] { font-size: 1.6rem !important; }
+            [data-testid="stMetricLabel"] { font-size: 0.85rem !important; }
+            .stDataFrame, div[data-testid="stTable"] { font-size: 12px !important; }
+            .main .block-container { padding-top: 2rem; }
+            h1 { font-size: 2rem !important; }
+            h2 { font-size: 1.5rem !important; }
+            h3 { font-size: 1.2rem !important; }
         </style>
     """, unsafe_allow_html=True)
 
@@ -89,8 +71,18 @@ def main():
 
     if uploaded_file is not None:
         try:
-            # Lendo o arquivo carregado
-            df_raw = pd.read_excel(uploaded_file)
+            # Tenta ler o ficheiro Excel
+            try:
+                # O engine='openpyxl' é usado internamente pelo pandas. 
+                # Se não estiver instalado, o erro será capturado aqui.
+                df_raw = pd.read_excel(uploaded_file, engine='openpyxl')
+            except ImportError:
+                st.error("❌ Erro de Dependência: A biblioteca 'openpyxl' não está instalada no ambiente do servidor.")
+                st.info("💡 **Como resolver:** Crie um ficheiro chamado `requirements.txt` na raiz do seu projeto (no GitHub) e escreva apenas `openpyxl` dentro dele.")
+                return
+            except Exception as e:
+                st.error(f"Erro ao ler o ficheiro Excel: {e}")
+                return
             
             # Validação de Colunas
             colunas_necessarias = [
@@ -111,7 +103,6 @@ def main():
             # --- KPIs de Resumo ---
             st.subheader("Indicadores de Desempenho")
             
-            # Linha 1: Visão Financeira, Giro e Volume (Pares)
             m1, m2, m3, m4, m5 = st.columns(5)
             
             fat_total = df_final['Faturamento Líquido'].sum()
@@ -126,7 +117,6 @@ def main():
             m4.metric("Giro Médio (Mês)", f"{giro_medio:.2f}")
             m5.metric("Margem Média", f"{margem_media:.1f}%")
 
-            # Linha 2: Status Operacional
             st.write("---")
             col1, col2, col3 = st.columns(3)
             
@@ -137,23 +127,17 @@ def main():
             col2.metric("Risco de Ruptura (A)", len(rupturas), delta_color="inverse")
             col3.metric("Itens 'Mico'", len(micos), delta_color="inverse")
 
-            # --- Tabelas e Filtros ---
             st.divider()
             st.subheader("Visualização dos Dados Analisados")
             
-            # Opção de filtro por Classe ABC
             filtro_abc = st.multiselect("Filtrar por Classe ABC", options=['A', 'B', 'C'], default=['A', 'B', 'C'])
             df_display = df_final[df_final['Classe_ABC'].isin(filtro_abc)].copy()
-            
-            # Renomeando colunas para a visualização
             df_display = df_display.rename(columns={'Qtd. Estoque': 'Stock (Pares)'})
             
             st.dataframe(df_display[['Referência', 'Classe_ABC', 'Giro', 'Cobertura_Dias', 'Status_Estrategico', 'Faturamento Líquido', '%Margem', 'Stock (Pares)', 'Estoque Custo Real']], use_container_width=True)
 
-            # --- Alertas Críticos ---
             st.divider()
             st.subheader("⚠️ Alertas de Atenção")
-            
             aba1, aba2 = st.tabs(["🔥 Rupturas Iminentes (Classe A)", "❄️ Stock Parado (Micos)"])
             
             with aba1:
@@ -170,22 +154,23 @@ def main():
                 else:
                     st.success("Não foram detetados 'Micos' críticos no stock atual.")
 
-            # --- Exportação ---
             st.divider()
-            # Converter dataframe para Excel em memória
             buffer = io.BytesIO()
-            with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
-                df_final.to_excel(writer, index=False, sheet_name='Analise_Giro')
-            
-            st.download_button(
-                label="📥 Baixar Análise Completa em Excel",
-                data=buffer.getvalue(),
-                file_name="resultado_analise_estoque.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            )
+            try:
+                with pd.ExcelWriter(buffer, engine='openpyxl') as writer:
+                    df_final.to_excel(writer, index=False, sheet_name='Analise_Giro')
+                
+                st.download_button(
+                    label="📥 Baixar Análise Completa em Excel",
+                    data=buffer.getvalue(),
+                    file_name="resultado_analise_estoque.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                )
+            except:
+                st.error("Erro ao gerar ficheiro de download.")
 
         except Exception as e:
-            st.error(f"Erro ao processar o ficheiro: {e}")
+            st.error(f"Erro inesperado: {e}")
     else:
         st.info("Aguardando upload do ficheiro Excel na barra lateral.")
 
