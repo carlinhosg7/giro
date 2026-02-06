@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import io
+import openpyxl
 
 # Configuração da página Streamlit
 st.set_page_config(page_title="Análise de Giro e Estoque", layout="wide")
